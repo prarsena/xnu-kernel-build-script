@@ -20,4 +20,4 @@ xnu-8020.140.41/BUILD/
 
 # macOS
 .DS_Store
-.vscode/
+.vscode/settings.json

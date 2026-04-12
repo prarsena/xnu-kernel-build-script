@@ -1,7 +1,8 @@
-## Code change deploy
-
+## Code change deploy workflow
 
 ```bash
+
+# Sync changes
 
 rsync -av \
   "/Volumes/Macintosh HD/Users/pete/Developer/xnu-monterey/xnu-8020.140.41/config/version.c" \
@@ -13,6 +14,7 @@ export DEVELOPER_DIR=/Users/xnuman/Xcode_nospace.app/Contents/Developer
 SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.3.sdk"
 
 # Build kernel (takes 5-15 min depending on what changed):
+
 cd /Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41
 make SDKROOT="$SDKROOT" \
   ARCH_CONFIGS=X86_64 KERNEL_CONFIGS=DEVELOPMENT \
@@ -39,7 +41,8 @@ sudo mount -o nobrowse -t apfs /dev/disk1s8 ~/live_mount
 sudo bless --folder ~/live_mount/System/Library/CoreServices --bootefi --create-snapshot
 sudo umount ~/live_mount
 
-# set boot commands and reboot
+# Set boot params and reboot
+
 sudo nvram boot-args="kcsuffix=development wlan.skywalk.enable=0 -v serial=3 debug=0x8"
 sudo reboot
 
