@@ -6,13 +6,13 @@ AvailabilityVersions-*/
 dtrace-*/
 libdispatch-*/
 Libsystem-*/
-xnu-*/
 
 # Per-package build artifacts left inside source trees
 */dst/
 */obj/
 */sym/
 */build/
+xnu-8020.140.41/BUILD/
 
 # Makefile.xnudeps sentinel files (mark completed unpack/fixup steps)
 */.src
@@ -20,3 +20,4 @@ xnu-*/
 
 # macOS
 .DS_Store
+.vscode/
