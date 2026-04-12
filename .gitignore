@@ -1,0 +1,22 @@
+# Downloaded tarballs
+*.tar.gz
+
+# Extracted source trees (large, fully reproducible via Makefile.xnudeps)
+AvailabilityVersions-*/
+dtrace-*/
+libdispatch-*/
+Libsystem-*/
+xnu-*/
+
+# Per-package build artifacts left inside source trees
+*/dst/
+*/obj/
+*/sym/
+*/build/
+
+# Makefile.xnudeps sentinel files (mark completed unpack/fixup steps)
+*/.src
+./.xnu-fixups-*
+
+# macOS
+.DS_Store
