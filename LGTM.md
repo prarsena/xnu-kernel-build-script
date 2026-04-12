@@ -1,5 +1,7 @@
 ## Code change deploy workflow
 
+For the starting point of changing the kernel version info:
+
 ```bash
 
 # Sync changes
@@ -45,5 +47,39 @@ sudo umount ~/live_mount
 
 sudo nvram boot-args="kcsuffix=development wlan.skywalk.enable=0 -v serial=3 debug=0x8"
 sudo reboot
+
+```
+
+After you run `kmutil create` (via the `verify-and-build-kc` script), you can invoke `what` and `strings` on the kernel.development binary:
+
+```bash
+
+DEV_KERNEL="/Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64/kernel.development"
+
+what $DEV_KERNEL
+#	VERSION: Darwin 21.6.0 | --3V3 B1T 7H3 @PPL3-- [p3t3] | Sun Apr 12 14:11:59 PDT 2026 | xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64 |
+
+strings $DEV_KERNEL | grep "Darwin"
+#@(#)VERSION: Darwin 21.6.0 | --3V3 B1T 7H3 @PPL3-- [p3t3] | Sun Apr 12 14:11:59 PDT 2026 | xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64 |
+#Darwin
+
+strings $DEV_KERNEL | grep "3V3"   
+#@(#)VERSION: Darwin 21.6.0 | --3V3 B1T 7H3 @PPL3-- [p3t3] | Sun Apr 12 14:11:59 PDT 2026 | xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64 |
+#  >~~~> 3V3 B1T 7H3 @PPL3 21.6.0 <~~~< 
+```
+
+Later, after you bless the kernel and reboot into it, you can print your custom kernel info:
+
+```bash
+uname -a
+#Darwin xumann 21.6.0   >~~~> 3V3 B1T 7H3 @PPL3 21.6.0 <~~~<    [p3t3] :: Sun Apr 12 14:11:59 PDT 2026    :: xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64 x86_64
+
+uname -v
+#  >~~~> 3V3 B1T 7H3 @PPL3 21.6.0 <~~~<    [p3t3] :: Sun Apr 12 14:11:59 PDT 2026    :: xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64
+
+sysctl kern.version
+#kern.version:   >~~~> 3V3 B1T 7H3 @PPL3 21.6.0 <~~~< 
+# [p3t3] :: Sun Apr 12 14:11:59 PDT 2026 
+# :: xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64
 
 ```
