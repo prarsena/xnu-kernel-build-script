@@ -17,6 +17,7 @@ xnu-8020.140.41/BUILD/
 # Makefile.xnudeps sentinel files (mark completed unpack/fixup steps)
 */.src
 ./.xnu-fixups-*
+DISK_CLEANUP.md
 
 # macOS
 .DS_Store

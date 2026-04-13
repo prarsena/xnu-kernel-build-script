@@ -417,26 +417,36 @@ sudo umount ~/live_mount
 
 #### Pruning old snapshots
 
-List all snapshots on the target volume (mount it first if not already mounted):
+Two snapshot types exist on the xnu-xnu system volume and they serve different purposes:
+
+| Name prefix | Created by | Purgeable | Keep? |
+|---|---|---|---|
+| `com.apple.os.update-*` | macOS system update / initial install | No | Yes — do not delete; this is the original sealed OS snapshot |
+| `com.apple.bless.*` | `bless --create-snapshot` | Yes | Only the newest (currently booted) one |
+
+Every `bless --create-snapshot` run adds one more `com.apple.bless.*` snapshot. They accumulate across kernel development iterations. Only the one marked "Will root to this snapshot" in `diskutil apfs listSnapshots` matters — the rest are dead weight.
+
+**Current state (as of 2026-04-12):** `disk1s8` has 5 stale `com.apple.bless.*` snapshots (XIDs 35392–40847) and 1 active snapshot at XID 41613 (`com.apple.bless.FF149885-5F6E-499C-A659-EBF191C05FFA`). The stale 5 are safe to delete.
+
+List all snapshots on the target volume:
 
 ```bash
 sudo mount -o nobrowse -t apfs /dev/disk1s8 ~/live_mount
 diskutil apfs listSnapshots disk1s8
 ```
 
-Delete a specific snapshot by name:
+Delete a specific snapshot by UUID (preferred — avoids name quoting issues):
 
 ```bash
-sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_systemsnapshot \
-  -r <snapshot-name> -v ~/live_mount
+sudo diskutil apfs deleteSnapshot disk1s8 -uuid <UUID>
 ```
 
-**Nuke all but the newest** (safe to run after confirming the system boots OK):
+**Nuke all bless snapshots except the newest** (safe to run after confirming the system boots OK):
 
 ```bash
 sudo mount -o nobrowse -t apfs /dev/disk1s8 ~/live_mount
 
-snapshots=$(diskutil apfs listSnapshots disk1s8 | grep 'com.apple.os.update' | awk '{print $NF}')
+snapshots=$(diskutil apfs listSnapshots disk1s8 | grep 'com.apple.bless' | awk '{print $NF}')
 latest=$(echo "$snapshots" | tail -1)
 echo "$snapshots" | grep -v "$latest" | while read snap; do
   echo "Deleting $snap"
@@ -447,7 +457,7 @@ done
 sudo umount ~/live_mount
 ```
 
-After cleanup only one snapshot remains — the blessed one the bootloader uses. Subsequent `bless --create-snapshot` runs will add one more; prune again after the next confirmed boot.
+After cleanup: one `com.apple.os.update-*` (original seal) + one `com.apple.bless.*` (current boot target). Subsequent `bless --create-snapshot` runs will add one more bless snapshot; prune again after the next confirmed boot.
 
 ---
 
