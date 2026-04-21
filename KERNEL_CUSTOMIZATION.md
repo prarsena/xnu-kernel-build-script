@@ -339,9 +339,16 @@ Use `os_log(OS_LOG_DEFAULT, ...)` for production (goes to unified log). Use `kpr
 
 To add a **new syscall**:
 
-1. Add an entry to `bsd/kern/syscalls.master` (assigns a number and prototype)
-2. Run `make -f Makefile syscalls` in the `bsd/kern/` dir to regenerate `init_sysent.c`
-3. Implement the handler in `bsd/kern/`
+1. Add an entry to `bsd/kern/syscalls.master` (assigns a number and prototype). Use `NO_SYSCALL_STUB` to suppress libSystem stub generation — callers invoke the syscall via `syscall(N, ...)` directly.
+2. Register the new `.c` file in `bsd/conf/files` as `standard` (or `optional development` for dev/debug-only handlers).
+3. Implement the handler in `bsd/kern/`. The standard signature is:
+   ```c
+   int my_syscall(struct proc *p, struct my_syscall_args *uap, int32_t *retval);
+   ```
+   The `my_syscall_args` struct is auto-generated into `bsd/sys/sysproto.h` — include `<sys/sysproto.h>` in your implementation file.
+4. Run the normal top-level `make` on xnu-xnu. The build system automatically regenerates all derived files from `syscalls.master` via `makesyscalls.sh`. There is no separate `make syscalls` target.
+
+> **Five files are regenerated**, not just `init_sysent.c`: `bsd/kern/init_sysent.c`, `bsd/kern/syscalls.c`, `bsd/sys/syscall.h`, `bsd/sys/sysproto.h`, and `security/audit/audit_syscalls.c`.
 
 ---
 
@@ -494,6 +501,136 @@ Typical incremental build time for a single changed `.c` file: **~30 seconds**. 
 
 ---
 
+## 11. Privilege System — `kern_priv.c` and `mac_priv.c`
+
+### What these files do
+
+**`bsd/kern/kern_priv.c`** implements `priv_check_cred()` — the **central privilege enforcement gate** for the BSD layer. Every kernel subsystem that wants to restrict an operation to privileged callers uses this single function. The logic is:
+
+1. Ask MAC policies: **can this be denied?** (`mac_priv_check`) — any deny wins unconditionally
+2. If not denied and UID == 0 (root), **grant** (unless `PRIVCHECK_DEFAULT_UNPRIVILEGED_FLAG` is set)
+3. Ask MAC policies: **can this be granted?** (`mac_priv_grant`) — any grant wins
+4. Otherwise: return `EPERM`
+
+**`security/mac_priv.c`** is the TrustedBSD MAC Framework hook layer. It iterates all loaded MAC policy modules and calls their `priv_check` / `priv_grant` entry points. This is how SandboxD, AMFI, and similar kexts restrict or extend privileges beyond simple UID=0 checks.
+
+**`bsd/sys/priv.h`** defines all named privilege identifiers. These are integer constants naming *types of operations*, not runtime state. Selected examples:
+
+| Constant | Value | What it guards |
+|---|---|---|
+| `PRIV_ADJTIME` | 1000 | Set system time adjustment |
+| `PRIV_ENDPOINTSECURITY_CLIENT` | 1016 | Connect as an EndpointSecurity client |
+| `PRIV_VM_JETSAM` | 6001 | Adjust jetsam configuration |
+| `PRIV_VM_FOOTPRINT_LIMIT` | 6002 | Adjust process memory footprint limit |
+| `PRIV_NET_PRIVILEGED_TRAFFIC_CLASS` | 10000 | Set `SO_PRIVILEGED_TRAFFIC_CLASS` |
+| `PRIV_NET_PRIVILEGED_SOCKET_DELEGATE` | 10001 | Delegate a socket to another process |
+| `PRIV_NETINET_RESERVEDPORT` | 11000 | Bind a port below 1024 |
+| `PRIV_VFS_SNAPSHOT` | 14002 | Create/rename/delete APFS snapshots |
+
+Yes, these enforce real security — if `priv_check_cred` returns `EPERM`, the calling subsystem aborts the operation.
+
+---
+
+### Tracing privilege checks with DTrace
+
+**Known issue:** On macOS, running `dtrace` without flags auto-includes `/usr/lib/dtrace/darwin.d`, which contains a `uthread_t` typedef that conflicts with kernel type definitions and causes:
+
+```
+syntax error near "uthread_t"
+```
+
+**Fix:** always pass `-x nolibs` to suppress the auto-include. The `fbt` provider works fine without it.
+
+#### Trace every `priv_check_cred` call (pid, process name, privilege ID):
+
+```bash
+sudo dtrace -x nolibs -n '
+  fbt::priv_check_cred:entry {
+    printf("pid=%d comm=%s priv=%d\n", pid, execname, arg1);
+  }
+'
+```
+
+`arg1` is the `priv` integer — cross-reference against `bsd/sys/priv.h`.
+
+#### Also trace the result (0 = granted, 1 = EPERM):
+
+```bash
+sudo dtrace -x nolibs -n '
+  fbt::priv_check_cred:return {
+    printf("pid=%d comm=%s -> %d\n", pid, execname, arg1);
+  }
+'
+```
+
+#### Watch a specific privilege only (e.g. `PRIV_NETINET_RESERVEDPORT` = 11000):
+
+```bash
+sudo dtrace -x nolibs -n '
+  fbt::priv_check_cred:entry
+  /arg1 == 11000/ {
+    printf("reserved-port attempt: pid=%d comm=%s\n", pid, execname);
+  }
+'
+```
+
+#### Combined entry+return showing full decision:
+
+```bash
+sudo dtrace -x nolibs -n '
+  fbt::priv_check_cred:entry {
+    self->priv = arg1;
+  }
+  fbt::priv_check_cred:return
+  /self->priv/ {
+    printf("pid=%d %s priv=%d result=%s\n",
+      pid, execname, self->priv,
+      arg1 == 0 ? "GRANTED" : "DENIED");
+    self->priv = 0;
+  }
+'
+```
+
+---
+
+### Patching the decision logic (sysctl-gated bypass)
+
+The privilege identifiers in `priv.h` are compile-time constants — there is no "value" to set at runtime. What you can change is the **decision logic** in `priv_check_cred`.
+
+**Option A — sysctl-controlled bypass table in `kern_priv.c`** (simplest, stays in-tree):
+
+```c
+// bsd/kern/kern_priv.c — add at top of priv_check_cred(), before MAC checks:
+static int priv_bypass_enabled = 0;
+SYSCTL_INT(_kern, OID_AUTO, priv_bypass,
+    CTLFLAG_RW | CTLFLAG_LOCKED,
+    &priv_bypass_enabled, 0, "Bypass priv_check_cred (debug only)");
+
+int
+priv_check_cred(kauth_cred_t cred, int priv, int flags)
+{
+    if (__improbable(priv_bypass_enabled)) {
+        return 0;  /* grant everything — DANGEROUS, debug builds only */
+    }
+    /* ... existing logic ... */
+```
+
+Then at runtime:
+```bash
+sudo sysctl -w kern.priv_bypass=1   # open the gate
+sudo sysctl -w kern.priv_bypass=0   # restore enforcement
+```
+
+**Option B — MAC policy `priv_grant` hook** (the designed extensibility point):
+
+Implement `mpo_priv_grant` in your MAC policy (see Section 6). Return `0` for the specific privilege IDs you want to always grant. This is revocable and composable with other policies.
+
+**Option C — LLDB live patch** (development KC with `debug` boot-arg, no recompile):
+
+Set a breakpoint on `priv_check_cred:return`, inspect `$rax` (x86) or `$x0` (ARM), and override it to `0` to force a grant. Useful for one-off testing without a rebuild cycle.
+
+---
+
 ## Quick Reference — Files to Edit
 
 | What you want to change | File |
@@ -510,3 +647,5 @@ Typical incremental build time for a single changed `.c` file: **~30 seconds**. 
 | IOKit driver lifecycle | `iokit/Kernel/IOService.cpp` |
 | Panic log customization | `osfmk/kern/debug.c` |
 | Add a new syscall | `bsd/kern/syscalls.master` + implementation file |
+| Privilege enforcement logic | `bsd/kern/kern_priv.c`, `security/mac_priv.c` |
+| Privilege identifier constants | `bsd/sys/priv.h` |

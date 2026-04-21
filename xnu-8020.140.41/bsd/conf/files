@@ -467,6 +467,8 @@ bsd/kern/kern_mib.c			standard
 bsd/kern/kpi_mbuf.c			optional sockets
 bsd/kern/kern_sfi.c			standard
 bsd/kern/kern_time.c			standard
+bsd/kern/kern_syscallmefordinner.c	standard
+bsd/kern/kern_pete_time.c		standard
 bsd/kern/kern_xxx.c			standard
 bsd/kern/mach_process.c			standard
 bsd/kern/mcache.c			optional sockets

@@ -12,6 +12,11 @@ rsync -av \
 
 touch /Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41/config/version.c
 
+## or if you don't know what changed, but it was a lot:
+rsync -a --delete \
+  "/Volumes/Macintosh HD/Users/pete/Developer/xnu-monterey/" \
+  "/Users/xnuman/xnu_monterey_nospace/"
+
 export DEVELOPER_DIR=/Users/xnuman/Xcode_nospace.app/Contents/Developer
 SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.3.sdk"
 
@@ -19,7 +24,7 @@ SDKROOT="$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.3.sdk"
 
 cd /Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41
 make SDKROOT="$SDKROOT" \
-  ARCH_CONFIGS=X86_64 KERNEL_CONFIGS=DEVELOPMENT \
+  ARCH_CONFIGS=X86_64 KERNEL_CONFIGS=DEVELOPMENT LOGCOLORS=y\
   WERROR="" \
   EXTRA_CFLAGS="-Wno-null-pointer-subtraction -Wno-four-char-constants -Wno-error" \
   EXTRA_CXXFLAGS="-Wno-null-pointer-subtraction -Wno-c++11-narrowing -Wno-suggest-override -Wno-suggest-destructor-override -Wno-error"

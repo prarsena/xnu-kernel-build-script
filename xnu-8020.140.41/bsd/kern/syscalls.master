@@ -892,3 +892,5 @@
 549	AUE_NULL	ALL	{ int nosys(void); }
 550	AUE_NULL	ALL	{ int nosys(void); }
 551	AUE_FREADLINK	ALL	{ int freadlink(int fd, user_addr_t buf, user_size_t bufsize); }
+552	AUE_NULL	ALL	{ int pete_log(user_addr_t msg, user_size_t len) NO_SYSCALL_STUB; }
+553	AUE_NULL	ALL	{ int pete_gettimeofday(user_addr_t tp, user_addr_t tzp) NO_SYSCALL_STUB; }
