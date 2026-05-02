@@ -6,14 +6,13 @@ For the starting point of changing the kernel version info:
 
 # Sync changes
 
-rsync -av \
+## Sync changes (single file or full tree — --no-times makes make see changed files as newer than their .o):
+rsync -av --no-times \
   "/Volumes/Macintosh HD/Users/pete/Developer/xnu-monterey/xnu-8020.140.41/config/version.c" \
   "/Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41/config/version.c"
 
-touch /Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41/config/version.c
-
-## or if you don't know what changed, but it was a lot:
-rsync -a --delete \
+## or sync everything (excludes BUILD/ to preserve correctly-pathed .d dependency files):
+rsync -a --no-times --delete --exclude='xnu-8020.140.41/BUILD/' \
   "/Volumes/Macintosh HD/Users/pete/Developer/xnu-monterey/" \
   "/Users/xnuman/xnu_monterey_nospace/"
 
@@ -29,6 +28,16 @@ make SDKROOT="$SDKROOT" \
   EXTRA_CFLAGS="-Wno-null-pointer-subtraction -Wno-four-char-constants -Wno-error" \
   EXTRA_CXXFLAGS="-Wno-null-pointer-subtraction -Wno-c++11-narrowing -Wno-suggest-override -Wno-suggest-destructor-override -Wno-error"
 
+
+# Copy symbolset binaries into kext bundles — required after every build.
+# 'make' produces .symbolset files in config/ but never installs them into the
+# .kext bundles (that only happens with 'make install'). verify-kc-prereqs.sh
+# requires BSDKernel.kext/BSDKernel and Private.kext/Private to exist there.
+OBJ=/Users/xnuman/xnu_monterey_nospace/xnu-8020.140.41/BUILD/obj/DEVELOPMENT_X86_64/config
+for f in "$OBJ"/*.symbolset; do
+  name=$(basename "$f" .symbolset)
+  cp "$f" "$OBJ/System.kext/PlugIns/${name}.kext/${name}"
+done
 
 # Rebuild KC + bless:
 

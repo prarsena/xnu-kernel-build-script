@@ -33,7 +33,7 @@ pete_log(struct proc *p __unused, struct pete_log_args *uap, int32_t *retval __u
 	}
 	buf[len] = '\0';
 
-	kprintf("[pete-dinner] %s\n", buf);
+	printf("[pete-dinner] %s\n", buf);
 
 	return 0;
 }
